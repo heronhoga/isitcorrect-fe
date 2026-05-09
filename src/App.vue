@@ -1,4 +1,21 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { ref, watch } from "vue";
+const text = ref("");
+const isCharLimitExceeded = ref(false);
+
+watch(text, (newValue, oldValue) => {
+  console.log("Text changed:", newValue);
+  if (newValue.length > 512) {
+    text.value = newValue.slice(0, 512);
+  }
+
+  if (newValue.length >= 512) {
+    isCharLimitExceeded.value = true;
+  } else {
+    isCharLimitExceeded.value = false;
+  }
+});
+</script>
 
 <template>
   <div class="nb-root">
@@ -11,17 +28,24 @@
       </p>
 
       <label class="nb-label" for="grammar-input">Your text</label>
+      <div class="nb-input-container">
+        <p class="nb-label">total: {{ text.length }}/512 characters</p>
+        <p v-if="isCharLimitExceeded" class="nb-error">
+          You have exceeded the character limit.
+        </p>
+      </div>
       <textarea
+        v-model="text"
         id="grammar-input"
         class="nb-textarea"
         rows="10"
+        maxlength="512"
         placeholder="Type your text here..."
       ></textarea>
 
-      <div>
+      <div class="nb-btn-container">
         <button class="nb-btn" type="button">✦ Check Grammar</button>
       </div>
-
       <p class="nb-footer">no data stored. no fluff. just corrections.</p>
     </div>
   </div>
@@ -153,5 +177,17 @@
   color: #555;
   letter-spacing: 1px;
   text-align: right;
+}
+
+.nb-error {
+  color: #d9534f;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.nb-input-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 </style>
