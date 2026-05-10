@@ -16,9 +16,8 @@ interface Issue {
 }
 
 interface GrammarResult {
-  error?: string;
-  details?: string;
-  corrected?: string;
+  details: string;
+  corrected: string;
   issues: Issue[];
 }
 
@@ -88,7 +87,7 @@ function closeModal() {
         :disabled="isLoading"
       ></textarea>
       <p v-if="isError" class="nb-error">
-        An error occurred while checking grammar:
+        An error occurred while checking grammar: {{ errorMessage }}
       </p>
 
       <div class="nb-btn-container">

@@ -6,7 +6,7 @@ export async function checkGrammarAPI(text: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${APP_KEY}`,
+      'X-APP-KEY': `${APP_KEY}`,
     },
     body: JSON.stringify({ text }),
   });
