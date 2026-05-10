@@ -16,7 +16,6 @@ interface Issue {
 }
 
 interface GrammarResult {
-  details: string;
   corrected: string;
   issues: Issue[];
 }
@@ -41,15 +40,22 @@ async function checkGrammar() {
 
   try {
     const response = await checkGrammarAPI(text.value);
-    if (!response.ok) {
+
+    if (!response || response.error) {
       isError.value = true;
-      errorMessage.value = response.error || "An unknown error occurred.";
-    } else {
-      result.value = response;
-      showModal.value = true;
+      errorMessage.value = response?.error || "An unknown error occurred.";
+      return;
     }
-  } catch (err) {
+
+    result.value = response;
+    console.log("Grammar check result:", result.value);
+
+    showModal.value = true;
+  } catch (err: any) {
     console.error("Grammar check failed:", err);
+
+    isError.value = true;
+    errorMessage.value = err.message || "Request failed";
   } finally {
     isLoading.value = false;
   }
