@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { checkGrammarAPI } from "./api/grammar";
 
 const text = ref("");
@@ -8,6 +8,12 @@ const isLoading = ref(false);
 const showModal = ref(false);
 const isError = ref(false);
 const errorMessage = ref("");
+
+// Recording state
+const isRecording = ref(false);
+const recordingError = ref("");
+const recordingPulse = ref(false);
+let recognition: any = null;
 
 interface Issue {
   original: string;
@@ -29,6 +35,75 @@ watch(text, (newValue) => {
   isCharLimitExceeded.value = newValue.length >= 512;
 });
 
+function startRecording() {
+  recordingError.value = "";
+
+  const SpeechRecognition =
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    recordingError.value =
+      "Speech recognition is not supported in this browser.";
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    isRecording.value = true;
+    recordingPulse.value = true;
+  };
+
+  recognition.onresult = (event: any) => {
+    const transcript = event.results[0][0].transcript;
+    const remaining = 512 - text.value.length;
+    if (remaining > 0) {
+      const toAppend = text.value
+        ? " " + transcript.slice(0, remaining - 1)
+        : transcript.slice(0, remaining);
+      text.value += toAppend;
+    }
+  };
+
+  recognition.onerror = (event: any) => {
+    if (event.error !== "aborted") {
+      recordingError.value = `Recording failed: ${event.error}`;
+    }
+    isRecording.value = false;
+    recordingPulse.value = false;
+  };
+
+  recognition.onend = () => {
+    isRecording.value = false;
+    recordingPulse.value = false;
+  };
+
+  recognition.start();
+}
+
+function stopRecording() {
+  if (recognition) {
+    recognition.stop();
+  }
+}
+
+function toggleRecording() {
+  if (isRecording.value) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
+
+onUnmounted(() => {
+  if (recognition) recognition.abort();
+});
+
 async function checkGrammar() {
   if (!text.value.trim()) return;
 
@@ -48,12 +123,8 @@ async function checkGrammar() {
     }
 
     result.value = response;
-    console.log("Grammar check result:", result.value);
-
     showModal.value = true;
   } catch (err: any) {
-    console.error("Grammar check failed:", err);
-
     isError.value = true;
     errorMessage.value = err.message || "Request failed";
   } finally {
@@ -73,7 +144,7 @@ function closeModal() {
       <p class="nb-desc">
         Simple grammar corrector — in case you need help with your writing in an
         immediate way.
-        <span class="nb-badge">by hg</span>
+        <span class="nb-badge">by Hoga</span>
       </p>
 
       <label class="nb-label" for="grammar-input">Your text</label>
@@ -89,18 +160,41 @@ function closeModal() {
         class="nb-textarea"
         rows="10"
         maxlength="512"
-        placeholder="Type your text here..."
+        placeholder="Type your text here... or hit ● REC to speak it."
         :disabled="isLoading"
       ></textarea>
+
+      <!-- Recording error -->
+      <p v-if="recordingError" class="nb-error nb-error--recording">
+        ⚠ {{ recordingError }}
+      </p>
+
       <p v-if="isError" class="nb-error">
         An error occurred while checking grammar: {{ errorMessage }}
       </p>
 
       <div class="nb-btn-container">
+        <!-- Record button -->
+        <button
+          class="nb-btn nb-btn--record"
+          :class="{ 'nb-btn--recording': isRecording }"
+          type="button"
+          :disabled="isLoading"
+          @click="toggleRecording"
+          :aria-label="isRecording ? 'Stop recording' : 'Start recording'"
+        >
+          <span
+            class="nb-rec-dot"
+            :class="{ 'nb-rec-dot--active': isRecording }"
+          ></span>
+          <span>{{ isRecording ? "Stop" : "● Rec" }}</span>
+        </button>
+
+        <!-- Check grammar button -->
         <button
           class="nb-btn"
           type="button"
-          :disabled="isLoading || !text.trim()"
+          :disabled="isLoading || !text.trim() || isRecording"
           @click="checkGrammar"
         >
           <span v-if="isLoading" class="nb-btn-loading">
@@ -109,6 +203,20 @@ function closeModal() {
           <span v-else>✦ Check Grammar</span>
         </button>
       </div>
+
+      <!-- Recording live indicator -->
+      <Transition name="fade">
+        <div v-if="isRecording" class="nb-recording-banner">
+          <div class="nb-recording-bars">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <span class="nb-recording-label">Listening... speak now</span>
+          <div class="nb-recording-bars nb-recording-bars--mirror">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </Transition>
+
       <p class="nb-footer">no data stored. no fluff. just corrections.</p>
     </div>
 
@@ -134,7 +242,6 @@ function closeModal() {
         @click.self="closeModal"
       >
         <div class="nb-modal">
-          <!-- Header -->
           <div class="nb-modal-header">
             <h2 class="nb-modal-title">Grammar <span>Report</span></h2>
             <button class="nb-close-btn" @click="closeModal" aria-label="Close">
@@ -142,7 +249,6 @@ function closeModal() {
             </button>
           </div>
 
-          <!-- Issues count badge -->
           <div class="nb-issues-meta">
             <span
               class="nb-issues-badge"
@@ -161,7 +267,6 @@ function closeModal() {
             <div class="nb-corrected-box">{{ result.corrected }}</div>
           </div>
 
-          <!-- Issues list -->
           <div v-if="result.issues.length > 0" class="nb-section">
             <p class="nb-section-label">✦ Issues Breakdown</p>
             <div class="nb-issues-list">
@@ -194,7 +299,6 @@ function closeModal() {
             </div>
           </div>
 
-          <!-- Actions -->
           <div class="nb-modal-actions">
             <button class="nb-btn nb-btn--secondary" @click="closeModal">
               Dismiss
@@ -290,6 +394,11 @@ function closeModal() {
   font-size: 0.75rem;
   margin-bottom: 0.25rem;
 }
+.nb-error--recording {
+  margin-top: 0.5rem;
+  border-left: 3px solid #d9534f;
+  padding-left: 0.5rem;
+}
 
 /* ── Input ── */
 .nb-input-container {
@@ -318,10 +427,14 @@ function closeModal() {
   cursor: not-allowed;
 }
 
-/* ── Button ── */
+/* ── Button row ── */
 .nb-btn-container {
   display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
+
+/* ── Button ── */
 .nb-btn {
   margin-top: 1.25rem;
   display: inline-flex;
@@ -365,6 +478,135 @@ function closeModal() {
   transform: translate(-1px, -1px);
 }
 
+/* ── Record button ── */
+.nb-btn--record {
+  background: #fff;
+  color: #000;
+  border-color: #000;
+  box-shadow: 4px 4px 0 #555;
+  position: relative;
+  overflow: hidden;
+}
+.nb-btn--record:hover:not(:disabled) {
+  background: #fff0f0;
+  box-shadow: 6px 6px 0 #333;
+  transform: translate(-1px, -1px);
+}
+.nb-btn--recording {
+  background: #000 !important;
+  color: #ff3b3b !important;
+  border-color: #ff3b3b !important;
+  box-shadow: 4px 4px 0 #ff3b3b !important;
+  animation: rec-border-pulse 1s ease-in-out infinite;
+}
+@keyframes rec-border-pulse {
+  0%,
+  100% {
+    box-shadow: 4px 4px 0 #ff3b3b;
+  }
+  50% {
+    box-shadow: 6px 6px 0 #ff3b3b;
+  }
+}
+
+/* Blinking dot */
+.nb-rec-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #000;
+  flex-shrink: 0;
+}
+.nb-rec-dot--active {
+  background: #ff3b3b;
+  animation: blink-dot 0.8s step-start infinite;
+}
+@keyframes blink-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ── Recording live banner ── */
+.nb-recording-banner {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: #000;
+  border: 2px solid #ff3b3b;
+  padding: 0.6rem 1rem;
+  box-shadow: 4px 4px 0 #ff3b3b;
+}
+.nb-recording-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #ff3b3b;
+}
+.nb-recording-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+}
+.nb-recording-bars span {
+  display: block;
+  width: 4px;
+  background: #ff3b3b;
+  animation: wave 0.7s ease-in-out infinite alternate;
+}
+.nb-recording-bars span:nth-child(1) {
+  animation-delay: 0s;
+  height: 6px;
+}
+.nb-recording-bars span:nth-child(2) {
+  animation-delay: 0.1s;
+  height: 14px;
+}
+.nb-recording-bars span:nth-child(3) {
+  animation-delay: 0.2s;
+  height: 20px;
+}
+.nb-recording-bars span:nth-child(4) {
+  animation-delay: 0.3s;
+  height: 10px;
+}
+.nb-recording-bars span:nth-child(5) {
+  animation-delay: 0.4s;
+  height: 16px;
+}
+.nb-recording-bars--mirror span:nth-child(1) {
+  animation-delay: 0.4s;
+}
+.nb-recording-bars--mirror span:nth-child(2) {
+  animation-delay: 0.3s;
+}
+.nb-recording-bars--mirror span:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.nb-recording-bars--mirror span:nth-child(4) {
+  animation-delay: 0.1s;
+}
+.nb-recording-bars--mirror span:nth-child(5) {
+  animation-delay: 0s;
+}
+@keyframes wave {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
 /* ── Spinner inside button ── */
 .nb-btn-loading {
   display: inline-flex;
@@ -386,7 +628,7 @@ function closeModal() {
   }
 }
 
-/* ── Overlay (shared by loading + modal) ── */
+/* ── Overlay ── */
 .nb-overlay {
   position: fixed;
   inset: 0;
@@ -426,7 +668,6 @@ function closeModal() {
   display: block;
   width: 8px;
   background: #000;
-  border-radius: 0;
   animation: bar-bounce 0.9s ease-in-out infinite;
 }
 .nb-loading-bars span:nth-child(1) {
@@ -445,7 +686,6 @@ function closeModal() {
   animation-delay: 0.45s;
   height: 36px;
 }
-
 @keyframes bar-bounce {
   0%,
   100% {
@@ -516,8 +756,6 @@ function closeModal() {
   background: #000;
   color: #fff;
 }
-
-/* ── Issues badge ── */
 .nb-issues-meta {
   display: flex;
   align-items: center;
@@ -536,8 +774,6 @@ function closeModal() {
   background: #cfe4e6;
   color: #000;
 }
-
-/* ── Sections ── */
 .nb-section {
   display: flex;
   flex-direction: column;
@@ -558,8 +794,6 @@ function closeModal() {
   line-height: 1.7;
   white-space: pre-wrap;
 }
-
-/* ── Issues list ── */
 .nb-issues-list {
   display: flex;
   flex-direction: column;
@@ -636,8 +870,6 @@ function closeModal() {
   border-top: 1px dashed #ccc;
   padding-top: 0.4rem;
 }
-
-/* ── Modal actions ── */
 .nb-modal-actions {
   display: flex;
   gap: 0.75rem;
@@ -660,7 +892,6 @@ function closeModal() {
 .fade-leave-to {
   opacity: 0;
 }
-
 .modal-enter-active {
   transition: opacity 0.2s ease;
 }
@@ -674,7 +905,6 @@ function closeModal() {
 .modal-leave-to {
   opacity: 0;
 }
-
 @keyframes modal-pop {
   from {
     transform: translateY(16px) scale(0.97);
