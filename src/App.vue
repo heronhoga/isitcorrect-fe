@@ -104,6 +104,14 @@ onUnmounted(() => {
   if (recognition) recognition.abort();
 });
 
+function clearText() {
+  text.value = "";
+  isCharLimitExceeded.value = false;
+  recordingError.value = "";
+  isError.value = false;
+  errorMessage.value = "";
+}
+
 async function checkGrammar() {
   if (!text.value.trim()) return;
 
@@ -160,7 +168,7 @@ function closeModal() {
         class="nb-textarea"
         rows="10"
         maxlength="512"
-        placeholder="Type your text here... or hit ● REC to speak it."
+        placeholder="Type your text here.. or hit REC to speak it (limited compatibility on some browsers)."
         :disabled="isLoading"
       ></textarea>
 
@@ -187,7 +195,7 @@ function closeModal() {
             class="nb-rec-dot"
             :class="{ 'nb-rec-dot--active': isRecording }"
           ></span>
-          <span>{{ isRecording ? "Stop" : "● Rec" }}</span>
+          <span>{{ isRecording ? "Stop" : "Rec" }}</span>
         </button>
 
         <!-- Check grammar button -->
@@ -201,6 +209,10 @@ function closeModal() {
             <span class="nb-spinner"></span> Checking...
           </span>
           <span v-else>✦ Check Grammar</span>
+        </button>
+
+        <button class="nb-btn-clear" type="button" @click="clearText">
+          <span>Clear Text</span>
         </button>
       </div>
 
@@ -217,7 +229,15 @@ function closeModal() {
         </div>
       </Transition>
 
-      <p class="nb-footer">no data stored. no fluff. just corrections.</p>
+      <p class="nb-footer">
+        no data stored. instagram
+        <a
+          class="nb-footer-insta"
+          href="https://instagram.com/1afrinata"
+          target="_blank"
+          >@1afrinata</a
+        >
+      </p>
     </div>
 
     <!-- Loading Overlay -->
@@ -389,6 +409,10 @@ function closeModal() {
   letter-spacing: 1px;
   text-align: right;
 }
+.nb-footer-insta {
+  color: #000;
+  font-weight: 700;
+}
 .nb-error {
   color: #d9534f;
   font-size: 0.75rem;
@@ -476,6 +500,34 @@ function closeModal() {
 .nb-btn--secondary:hover:not(:disabled) {
   box-shadow: 6px 6px 0 #888;
   transform: translate(-1px, -1px);
+}
+.nb-btn-clear {
+  margin-top: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffb303;
+  color: #ffffff;
+  font-family: "Space Mono", monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border: 3px solid #000;
+  padding: 0.75rem 2rem;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 #555;
+  transition:
+    box-shadow 0.1s,
+    transform 0.1s;
+}
+.nb-btn-clear:hover:not(:disabled) {
+  box-shadow: 6px 6px 0 #333;
+  transform: translate(-1px, -1px);
+}
+.nb-btn-clear:active:not(:disabled) {
+  box-shadow: 1px 1px 0 #000;
+  transform: translate(3px, 3px);
 }
 
 /* ── Record button ── */
